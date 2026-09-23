@@ -1,0 +1,14 @@
+# Phase 2 build output — 500+ MB, regenerate with: python3 build/build.py
+/out/
+
+# Compiled server binaries — regenerate with: cd server && go build .
+# (or `GOOS=linux GOARCH=arm64 go build` for the deploy target)
+/server/dictapi-server
+/server/dictapi-server-*
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

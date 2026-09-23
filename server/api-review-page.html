@@ -1,0 +1,365 @@
+<title>Dictionary API Spec</title>
+<meta name="description" content="Endpoint reference and open design questions for the click-to-define dictionary API, for review.">
+<style>
+  :root {
+    --bg: #f3f4f8;
+    --surface: #ffffff;
+    --surface-2: #eceff5;
+    --ink: #1b2030;
+    --ink-muted: #5b6178;
+    --border: #dadee8;
+    --accent: #2f4e8c;
+    --accent-ink: #ffffff;
+    --mark: #a86a12;
+    --mark-bg: #fbf0dc;
+    --mark-border: #edd6a4;
+    --code-bg: #eef1f7;
+    --get: #206b4b;
+    --get-bg: #e2f3ea;
+    --status-2xx: #206b4b;
+    --status-3xx: #7a5a10;
+    --status-4xx: #9a2e2e;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10131b;
+      --surface: #171b26;
+      --surface-2: #1d2230;
+      --ink: #e7e9f0;
+      --ink-muted: #9aa1be;
+      --border: #2a2f3e;
+      --accent: #8fa8ea;
+      --accent-ink: #10131b;
+      --mark: #e0a84a;
+      --mark-bg: #2c2410;
+      --mark-border: #4a3c17;
+      --code-bg: #1b2030;
+      --get: #6fcf9e;
+      --get-bg: #133226;
+      --status-2xx: #6fcf9e;
+      --status-3xx: #e0c064;
+      --status-4xx: #e58a8a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10131b;
+    --surface: #171b26;
+    --surface-2: #1d2230;
+    --ink: #e7e9f0;
+    --ink-muted: #9aa1be;
+    --border: #2a2f3e;
+    --accent: #8fa8ea;
+    --accent-ink: #10131b;
+    --mark: #e0a84a;
+    --mark-bg: #2c2410;
+    --mark-border: #4a3c17;
+    --code-bg: #1b2030;
+    --get: #6fcf9e;
+    --get-bg: #133226;
+    --status-2xx: #6fcf9e;
+    --status-3xx: #e0c064;
+    --status-4xx: #e58a8a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    padding: 0 16px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-block: 32px 80px; }
+
+  h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; text-wrap: balance; }
+  code, pre, .mono { font-family: var(--mono); }
+
+  /* ---- Header ---- */
+  header.top {
+    display: flex; flex-direction: column; gap: 10px;
+    padding-bottom: 24px; margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  header.top .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  header.top h1 { font-size: 40px; }
+  header.top .ipa { font-family: var(--serif); font-style: italic; color: var(--ink-muted); font-size: 17px; }
+  header.top .dek { color: var(--ink-muted); max-width: 62ch; font-size: 15px; }
+  header.top .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+  }
+  .pill {
+    font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 100px;
+    border: 1px solid var(--border); color: var(--ink-muted); background: var(--surface);
+  }
+
+  /* ---- Stat row ---- */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 1px; background: var(--border);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    margin-bottom: 36px;
+  }
+  .stat { background: var(--surface); padding: 14px 16px; }
+  .stat .n { font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .stat .l { color: var(--ink-muted); font-size: 12px; margin-top: 2px; }
+
+  /* ---- Layout ---- */
+  .layout { display: grid; grid-template-columns: 190px 1fr; gap: 36px; align-items: start; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  nav.toc { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 2px; }
+  nav.toc .toc-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 6px; }
+  nav.toc a {
+    color: var(--ink-muted); text-decoration: none; font-size: 13px; padding: 5px 8px; border-radius: 6px;
+  }
+  nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+
+  main { min-width: 0; }
+  section { margin-bottom: 44px; }
+  section > h2 {
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);
+    margin-bottom: 14px; font-family: var(--sans); font-weight: 600;
+  }
+
+  /* ---- Endpoint entry (styled like a dictionary entry) ---- */
+  .entry {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px 24px; margin-bottom: 18px;
+  }
+  .entry-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .method {
+    font-family: var(--mono); font-weight: 600; font-size: 12px; padding: 2px 8px; border-radius: 5px;
+    background: var(--get-bg); color: var(--get); letter-spacing: 0.02em;
+  }
+  .path { font-family: var(--serif); font-size: 22px; font-weight: 600; }
+  .entry-def { color: var(--ink-muted); margin-bottom: 16px; max-width: 68ch; }
+
+  .field-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin: 16px 0 6px; }
+  table.kv { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.kv th, table.kv td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.kv th { color: var(--ink-muted); font-weight: 500; width: 30%; }
+  table.kv tr:last-child th, table.kv tr:last-child td { border-bottom: none; }
+
+  .status-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .status { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+  .status.s2 { color: var(--status-2xx); } .status.s3 { color: var(--status-3xx); } .status.s4 { color: var(--status-4xx); }
+  .status-desc { color: var(--ink-muted); font-size: 13px; }
+
+  pre.code {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; margin: 8px 0 0;
+  }
+  .jk { color: var(--accent); } .jv-str { color: var(--get); } .jv-num { color: var(--mark); } .jv-lit { color: var(--ink-muted); font-style: italic; }
+
+  /* ---- Schema reference ---- */
+  .schema { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; }
+  .schema h3 { font-size: 17px; margin-bottom: 10px; }
+  .schema-field { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .schema-field:last-child { border-bottom: none; }
+  .schema-field .fname { font-family: var(--mono); font-weight: 600; width: 120px; flex-shrink: 0; }
+  .schema-field .ftype { font-family: var(--mono); color: var(--accent); width: 100px; flex-shrink: 0; font-size: 12px; }
+  .schema-field .fdesc { color: var(--ink-muted); }
+
+  /* ---- Review callouts ---- */
+  .callout {
+    background: var(--mark-bg); border: 1px solid var(--mark-border); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 14px;
+  }
+  .callout .ctitle { font-weight: 600; color: var(--mark); font-size: 13.5px; margin-bottom: 4px; }
+  .callout p { margin: 0; color: var(--ink); font-size: 13.5px; }
+  .callout p + p { margin-top: 6px; }
+
+  footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border);
+    color: var(--ink-muted); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">API Reference · draft for review</div>
+    <h1>Dictionary API <span class="ipa">/ˈdɪkʃənɛri ˌeɪpiˈaɪ/</span></h1>
+    <p class="dek">Click-to-define endpoint for a test-taking platform, built on the kaikki.org English Wiktionary extract. Every response is pre-built offline; each request is one normalized hashmap lookup plus a byte copy — no database, no per-request parsing.</p>
+    <div class="meta-row">
+      <span class="pill">v1</span>
+      <span class="pill">base: localhost:8080</span>
+      <span class="pill">CC BY-SA 4.0 data</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="n">1,568,014</div><div class="l">lookup keys</div></div>
+    <div class="stat"><div class="n">557 MB</div><div class="l">index + data</div></div>
+    <div class="stat"><div class="n">&lt;1ms</div><div class="l">target server time</div></div>
+    <div class="stat"><div class="n">1 wk</div><div class="l">cache max-age</div></div>
+  </div>
+
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-label">On this page</div>
+      <a href="#health">GET /health</a>
+      <a href="#define">GET /v1/define/{word}</a>
+      <a href="#schema">Response schema</a>
+      <a href="#review">Open questions</a>
+    </nav>
+
+    <main>
+      <section id="health">
+        <h2>Endpoints</h2>
+        <div class="entry">
+          <div class="entry-head"><span class="method">GET</span><span class="path">/health</span></div>
+          <p class="entry-def">Load-balancer / CDN health probe. Cheap — never touches the dictionary index.</p>
+          <div class="status-row"><span class="status s2">200</span><span class="status-desc">plain text <code>ok</code>, <code>Cache-Control: no-store</code></span></div>
+        </div>
+
+        <div class="entry" id="define">
+          <div class="entry-head"><span class="method">GET</span><span class="path">/v1/define/{word}</span></div>
+          <p class="entry-def"><code>{word}</code> is exactly what the student clicked, URL-encoded (e.g. <code>Running%2C</code>). The server normalizes it — URL-decode, Unicode NFC, curly quotes to straight, edge punctuation stripped, lowercased — then does one hashmap lookup. A key can resolve to several results: the word's own meanings, plus every lemma it's a known form of, each tagged <code>via</code>.</p>
+
+          <div class="field-label">Request headers</div>
+          <table class="kv">
+            <tr><th>If-None-Match</th><td>optional — conditional GET, matched against the build-wide ETag</td></tr>
+            <tr><th>Accept-Encoding</th><td>if it excludes <code>gzip</code>, the server decompresses before responding (the one request-time exception)</td></tr>
+          </table>
+
+          <div class="field-label">Response headers (200)</div>
+          <table class="kv">
+            <tr><th>Content-Encoding</th><td><code>gzip</code>, unless the no-gzip fallback applied</td></tr>
+            <tr><th>Cache-Control</th><td><code>public, max-age=604800</code></td></tr>
+            <tr><th>ETag</th><td>quoted build version — identical across every key in one build</td></tr>
+            <tr><th>Vary</th><td><code>Accept-Encoding</code></td></tr>
+            <tr><th>Access-Control-Allow-Origin</th><td>from <code>ALLOW_ORIGIN</code> env var, if set</td></tr>
+          </table>
+
+          <div class="field-label">Example — 200 OK</div>
+          <div class="status-row"><span class="status s2">200</span><span class="status-desc">found</span></div>
+          <pre class="code" id="ex-200"></pre>
+
+          <div class="status-row"><span class="status s3">304</span><span class="status-desc">Not Modified — If-None-Match matched the current ETag, no body</span></div>
+
+          <div class="status-row"><span class="status s4">400</span><span class="status-desc">invalid word — empty after normalization, over 64 characters, or no letters</span></div>
+          <pre class="code" id="ex-400"></pre>
+
+          <div class="status-row"><span class="status s4">404</span><span class="status-desc">not found, <code>Cache-Control: public, max-age=3600</code></span></div>
+          <pre class="code" id="ex-404"></pre>
+
+          <div class="status-row"><span class="status s4">405</span><span class="status-desc">wrong method — only GET/HEAD allowed, <code>Allow: GET, HEAD</code></span></div>
+          <pre class="code" id="ex-405"></pre>
+        </div>
+      </section>
+
+      <section id="schema">
+        <h2>Response schema</h2>
+
+        <div class="schema">
+          <h3>DefineResponse</h3>
+          <div class="schema-field"><span class="fname">query</span><span class="ftype">string</span><span class="fdesc">the normalized lookup key</span></div>
+          <div class="schema-field"><span class="fname">results</span><span class="ftype">Result[]</span><span class="fdesc">one or more — own meanings plus linked lemmas</span></div>
+          <div class="schema-field"><span class="fname">attribution</span><span class="ftype">string</span><span class="fdesc">required — CC BY-SA license line</span></div>
+        </div>
+
+        <div class="schema">
+          <h3>Result</h3>
+          <div class="schema-field"><span class="fname">word</span><span class="ftype">string</span><span class="fdesc">original-cased headword</span></div>
+          <div class="schema-field"><span class="fname">via</span><span class="ftype">string?</span><span class="fdesc">present only when reached through a form/alt-of link</span></div>
+          <div class="schema-field"><span class="fname">ipa</span><span class="ftype">string?</span><span class="fdesc">first <code>/.../</code> transcription found</span></div>
+          <div class="schema-field"><span class="fname">audio</span><span class="ftype">string?</span><span class="fdesc">first mp3 URL found</span></div>
+          <div class="schema-field"><span class="fname">entries</span><span class="ftype">Entry[]</span><span class="fdesc">one per part of speech, page order preserved</span></div>
+        </div>
+
+        <div class="schema">
+          <h3>Entry</h3>
+          <div class="schema-field"><span class="fname">pos</span><span class="ftype">string</span><span class="fdesc">e.g. "verb", "noun"</span></div>
+          <div class="schema-field"><span class="fname">senses</span><span class="ftype">Sense[]</span><span class="fdesc">max 8, deprioritized senses sorted last</span></div>
+          <div class="schema-field"><span class="fname">forms / synonyms / antonyms</span><span class="ftype">string[]?</span><span class="fdesc">omitted when empty</span></div>
+          <div class="schema-field"><span class="fname">truncated</span><span class="ftype">boolean</span><span class="fdesc">true if senses were capped</span></div>
+        </div>
+
+        <div class="schema">
+          <h3>Sense</h3>
+          <div class="schema-field"><span class="fname">def</span><span class="ftype">string</span><span class="fdesc">the definition text</span></div>
+          <div class="schema-field"><span class="fname">tags</span><span class="ftype">string[]?</span><span class="fdesc">e.g. "transitive", "archaic"</span></div>
+          <div class="schema-field"><span class="fname">examples</span><span class="ftype">string[]?</span><span class="fdesc">max 2, ≤200 chars each</span></div>
+          <div class="schema-field"><span class="fname">synonyms</span><span class="ftype">string[]?</span><span class="fdesc">max 8, thesaurus junk filtered</span></div>
+        </div>
+      </section>
+
+      <section id="review">
+        <h2>Open questions for review</h2>
+
+        <div class="callout">
+          <div class="ctitle">ETag is build-wide, not per-key</div>
+          <p>Every key in one build shares the same ETag (the build version). A redeploy invalidates every client's cache at once, even for words whose content didn't change. Simple, but coarser than per-resource caching — worth a second opinion on whether that's the right tradeoff at scale.</p>
+        </div>
+
+        <div class="callout">
+          <div class="ctitle">Byte-level dedup in dict.bin measured at 0%</div>
+          <p>Each stored payload embeds its own <code>query</code> field, so two different keys' compressed bytes essentially never match. The dedup mechanism is harmless to keep but isn't earning its keep — real measured savings across 1,568,014 keys: none.</p>
+        </div>
+
+        <div class="callout">
+          <div class="ctitle">Proper-name form links can surface odd results</div>
+          <p>Clicking "book" also returns <code>Buck</code> <span class="mono">[via: alternative of Buck]</span> — a real, verified Wiktionary link (an alternate surname spelling), but low value for a student mid-passage. Open question: drop <code>pos == "name"</code> targets from form/alt-of links, or leave proper-name variants as-is?</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <span>Data: Wiktionary via kaikki.org, CC BY-SA 4.0</span>
+    <span>Server: Go, mmap + in-memory hashmap, TCP_NODELAY, single-write responses</span>
+  </footer>
+</div>
+
+<script>
+  function highlightJSON(obj) {
+    const json = JSON.stringify(obj, null, 2);
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
+      let cls = 'jv-num';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'jk' : 'jv-str';
+      } else if (/true|false|null/.test(match)) {
+        cls = 'jv-lit';
+      }
+      return '<span class="' + cls + '">' + match + '</span>';
+    });
+  }
+
+  const examples = {
+    'ex-200': {
+      query: "went",
+      results: [
+        {
+          word: "went", ipa: "/wɛnt/",
+          audio: "https://upload.wikimedia.org/.../went.mp3",
+          entries: [{ pos: "verb", senses: [{ def: "simple past of go", tags: ["form-of", "past"] }], truncated: false }]
+        },
+        {
+          word: "go", via: "simple past of go", ipa: "/ɡəʊ/",
+          entries: [{ pos: "verb", senses: [{ def: "To move through space (especially to or through a place).", tags: ["intransitive"] }], truncated: true }]
+        }
+      ],
+      attribution: "Wiktionary (via kaikki.org), CC BY-SA 4.0"
+    },
+    'ex-400': { error: "invalid_word" },
+    'ex-404': { error: "not_found" },
+    'ex-405': { error: "method_not_allowed" }
+  };
+
+  try {
+    for (const [id, obj] of Object.entries(examples)) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = highlightJSON(obj);
+    }
+  } catch (e) { /* rendering still works without highlighting */ }
+</script>

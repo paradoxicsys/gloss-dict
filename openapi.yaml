@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: Dictionary API
+  description: >
+    Click-to-define dictionary API for a test-taking platform, backed by the
+    kaikki.org English Wiktionary extract. Every response is pre-built at
+    offline build time; each request is one normalized hashmap lookup plus a
+    byte copy from a memory-mapped file -- no database, no per-request JSON
+    parsing or compression (except the rare non-gzip-client fallback).
+  version: "1"
+  license:
+    name: Data licensed CC BY-SA 4.0 (Wiktionary via kaikki.org)
+    url: https://creativecommons.org/licenses/by-sa/4.0/
+servers:
+  - url: http://localhost:8080
+    description: Local dev (Phase 3 Go server, DICT_DIR=../out)
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Used by the load balancer / CDN. Always cheap; does not touch the dictionary index.
+      operationId: health
+      responses:
+        "200":
+          description: Server is up.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+
+  /v1/define/{word}:
+    get:
+      summary: Define a word
+      description: >
+        `{word}` is exactly what the student clicked, URL-encoded (e.g.
+        `Running%2C`). The server normalizes it (URL-decode, Unicode NFC,
+        curly quotes to straight, edge-punctuation stripped, lowercased) and
+        looks it up. A key can resolve to several results: the word's own
+        meanings (if it's a headword itself) plus every lemma it's a known
+        form/alternate of, each tagged with `via`.
+      operationId: defineWord
+      parameters:
+        - name: word
+          in: path
+          required: true
+          description: The clicked text, URL-encoded. Normalized server-side before lookup.
+          schema:
+            type: string
+          example: went
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Conditional GET. Matched against the dataset-wide build-version ETag.
+          schema:
+            type: string
+          example: '"1790073003"'
+        - name: Accept-Encoding
+          in: header
+          required: false
+          description: >
+            If this doesn't include `gzip`, the server decompresses before
+            responding (the one place per-request computation happens).
+          schema:
+            type: string
+          example: gzip
+      responses:
+        "200":
+          description: Found. Body is gzip-compressed unless the client's Accept-Encoding excludes gzip.
+          headers:
+            Content-Encoding:
+              description: Present and set to `gzip` unless the no-gzip fallback applied.
+              schema:
+                type: string
+                example: gzip
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=604800
+            ETag:
+              description: Quoted build-version identifier; identical for every key from the same build.
+              schema:
+                type: string
+                example: '"1790073003"'
+            Vary:
+              schema:
+                type: string
+                example: Accept-Encoding
+            Access-Control-Allow-Origin:
+              description: Present only if the server's ALLOW_ORIGIN env var is set.
+              schema:
+                type: string
+                example: "*"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefineResponse"
+              example:
+                query: went
+                results:
+                  - word: went
+                    ipa: /wɛnt/
+                    audio: https://upload.wikimedia.org/wikipedia/commons/transcoded/7/78/LL-Q1860_%28eng%29-Pvanp7-went.wav/LL-Q1860_%28eng%29-Pvanp7-went.wav.mp3
+                    entries:
+                      - pos: verb
+                        senses:
+                          - def: simple past of go
+                            tags: [form-of, past]
+                        truncated: false
+                  - word: go
+                    via: simple past of go
+                    ipa: /ɡəʊ/
+                    entries:
+                      - pos: verb
+                        senses:
+                          - def: To move through space (especially to or through a place).
+                            tags: [intransitive]
+                        truncated: true
+                attribution: "Wiktionary (via kaikki.org), CC BY-SA 4.0"
+        "304":
+          description: Not Modified -- the client's If-None-Match matched the current ETag.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+        "400":
+          description: Invalid word (empty after normalization, over 64 characters, or no letters).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_word
+        "404":
+          description: Word not found in the dictionary.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=3600
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: not_found
+        "405":
+          description: Method not allowed (only GET and HEAD are supported).
+          headers:
+            Allow:
+              schema:
+                type: string
+                example: "GET, HEAD"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: method_not_allowed
+
+components:
+  schemas:
+    DefineResponse:
+      type: object
+      required: [query, results, attribution]
+      properties:
+        query:
+          type: string
+          description: The normalized lookup key.
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+        attribution:
+          type: string
+          example: "Wiktionary (via kaikki.org), CC BY-SA 4.0"
+
+    Result:
+      type: object
+      required: [word, entries]
+      properties:
+        word:
+          type: string
+          description: Original-cased headword.
+        via:
+          type: string
+          description: Present only when this result was reached through a form/alternate-of link, not the key's own headword.
+        ipa:
+          type: string
+          example: /ɡəʊ/
+        audio:
+          type: string
+          format: uri
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entry"
+
+    Entry:
+      type: object
+      required: [pos, senses, truncated]
+      properties:
+        pos:
+          type: string
+          example: verb
+        senses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sense"
+        forms:
+          type: array
+          items:
+            type: string
+        synonyms:
+          type: array
+          items:
+            type: string
+        antonyms:
+          type: array
+          items:
+            type: string
+        truncated:
+          type: boolean
+          description: True if senses were capped at 8 for this part of speech.
+
+    Sense:
+      type: object
+      required: [def]
+      properties:
+        def:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+          maxItems: 2
+        synonyms:
+          type: array
+          items:
+            type: string
+          maxItems: 8
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_word, not_found, method_not_allowed]
